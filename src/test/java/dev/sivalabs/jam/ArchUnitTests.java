@@ -1,0 +1,69 @@
+package dev.sivalabs.jam;
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+
+import com.tngtech.archunit.core.domain.Dependency;
+import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchCondition;
+import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+import jakarta.persistence.Entity;
+import org.junit.jupiter.api.Order;
+import org.springframework.data.repository.Repository;
+import org.springframework.stereotype.Service;
+
+@Order(1)
+@AnalyzeClasses(packages = ArchUnitTests.BASE_PACKAGE)
+class ArchUnitTests {
+    public static final String BASE_PACKAGE = "dev.sivalabs.feedbackhub";
+
+    // Controllers must not be called by service or repository classes
+    @ArchTest
+    static final ArchRule controllers_should_not_be_accessed_by_domain = noClasses()
+            .that()
+            .resideInAPackage("..domain..")
+            .should()
+            .accessClassesThat()
+            .resideInAPackage("..web..");
+    // Repositories must not be accessed from outside their own module
+    @ArchTest
+    static final ArchRule repositories_must_not_be_public =
+            noClasses().that().areAssignableTo(Repository.class).should().bePublic();
+
+    // Entities must not be public
+    @ArchTest
+    static final ArchRule entities_must_not_be_public =
+            classes().that().areAnnotatedWith(Entity.class).should().notBePublic();
+
+    // Services are public (accessible to inbound handlers in the same module),
+    // but must only be accessed from within their own module — other modules must go through *API facades.
+    @ArchTest
+    static final ArchRule services_must_not_be_used_from_other_modules = classes()
+            .that()
+            .areAnnotatedWith(Service.class)
+            .should(new ArchCondition<>("only be accessed from same module") {
+                @Override
+                public void check(JavaClass service, ConditionEvents events) {
+                    String serviceModule = moduleOf(service);
+                    for (Dependency dependency : service.getDirectDependenciesToSelf()) {
+                        JavaClass origin = dependency.getOriginClass();
+                        String originModule = moduleOf(origin);
+                        if (!serviceModule.equals(originModule)) {
+                            String message =
+                                    origin.getName() + " accesses " + service.getName() + " from another module";
+                            events.add(SimpleConditionEvent.violated(dependency, message));
+                        }
+                    }
+                }
+            });
+
+    private static String moduleOf(JavaClass clazz) {
+        String pkg = clazz.getPackageName();
+        String[] parts = pkg.split("\\.");
+        return parts[BASE_PACKAGE.split("\\.").length];
+    }
+}

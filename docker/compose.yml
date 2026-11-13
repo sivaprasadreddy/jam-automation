@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+  
+  ollama:
+    image: ollama/ollama:0.40.16
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+  jam-automation:
+    image: sivaprasadreddy/jam-automation
+    container_name: jam-automation
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/postgres
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_AI_MODEL_CHAT: ${SPRING_AI_MODEL_CHAT:-ollama}
+      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-your-openai-api-key}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - ollama
+    restart: unless-stopped
+
+volumes:
+  ollama-data:
