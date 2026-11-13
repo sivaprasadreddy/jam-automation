@@ -13,19 +13,8 @@ class UserService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<UserEntity> findByEmail(String email) {
-        return userRepository.findByEmailIgnoreCase(email);
-    }
-
-    @Transactional(readOnly = true)
     public Optional<UserDto> findById(Long id) {
         return userRepository.findById(id).map(this::toUserDto);
-    }
-
-    @Transactional
-    public void updateUser(Long userId, UpdateUserCmd cmd) {
-        var user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException("User not found"));
-        userRepository.updateUser(user.getId(), cmd.name());
     }
 
     private UserDto toUserDto(UserEntity user) {
